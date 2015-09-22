@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>MicRobot</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				font-family: Monospace;
+				background-color: #e2d8ce;
+				margin: 0px;
+				overflow: hidden;
+			}
+			.btn{
+				position:absolute;
+				top:200px;
+				left:800px;
+				width:200px;
+				padding:0px;
+				margin:0px;
+				background-color:#e2d8ce;
+			}
+			.btnImg{
+				padding:0px;
+				margin:0px;
+			}
+			#info{
+				padding:0px;
+				margin:0px;
+				position:absolute;
+			}
+
+
+		</style>
+	</head>
+	<body>
+		<!--<script src="js/three.min.js"></script>--!>
+		<script src="js/three.js"></script>
+		<script src="js/loaders/STLLoader.js"></script>
+		<script src="js/jquery.min.js"></script>
+		<script src="js/libs/stats.min.js"></script>
+		<script src="js/controls/OrbitControls.js"></script>
+		<script src="js/glMatrix.min.js"></script>
+		<script src="js/curve.js"></script>
+		<script src="js/mapTable.js"></script>
+		<button class="btn" type="button" id="clear" onclick="clearPathCurvePoints()"/>
+			<img class="btnImg" src="image/clear.png" id="clearImg"></img>
+		</button>
+
+		<button class="btn" type="button" id="delete" onclick="deletePathCurvePoints()"/>
+			<img class="btnImg" src="image/delete.png" id="deleteImg"></img>
+		</button>
+
+		<button class="btn" type="button" id="playOrPause" onclick="playOrPause()"/>
+			<img class="btnImg" src="image/play.png" id="playOrPauseImg"></img>
+		</button>
+
+		<button class="btn" type="button" id="stop" onclick="stop()"/>
+			<img class="btnImg" src="image/stop.png" id="stopImg"></img>
+		</button>
+
+		<button class="btn" type="button" id="view1" onclick="setView(1)"/>
+			<img class="btnImg" src="image/view1.png" id="view1Img"></img>
+		</button>
+
+		<button class="btn" type="button" id="view2" onclick="setView(2)"/>
+			<img class="btnImg" src="image/view2.png" id="view2Img"></img>
+		</button>
+
+		<button class="btn" type="button" id="view3" onclick="setView(3)"/>
+			<img class="btnImg" src="image/view3.png" id="view3Img"></img>
+		</button>
+
+		<button class="btn" type="button" id="view4" onclick="setView(4)"/>
+			<img class="btnImg" src="image/view4.png" id="view4Img"></img>
+		</button>
+
+		<button class="btn" type="button" id="view5" onclick="setView(5)"/>
+			<img class="btnImg" src="image/view5.png" id="view5Img"></img>
+		</button>
+
+		<button class="btn" type="button" id="view6" onclick="setView(6)"/>
+			<img class="btnImg" src="image/view6.png" id="view6Img"></img>
+		</button> 
+		
+		<p id="info">
+
+		<pre>
+</pre>
+		</p>
+		<script>
+			var footMesh, swingMesh, armMesh, armSpringMesh, armFrontMesh, frontPlateMesh, gripper1Mesh, gripperRack1Mesh, gripper2Mesh, gripperRack2Mesh, gearMesh;
+			var footG,swingG,armG,armSpringG,armFrontG,gripper1G,gripper2G;
+
+			var loader;
+			var container, stats;
+			var camera, scene, renderer, objects;
+			var particleLight, pointLight;
+			var modelInitialized=false;
+			var projector=new THREE.Projector();
+			var controls;
+			var o_portion;	
+			var tipSphere;
+			var sphereRadius=0.14;
+			var gripperPercent;
+			var tipHold=false;
+			var cols=500,rows=250;
+		
+			var swingHeight=0.51;
+			var armLength=0.49;
+			var armSpringLength=0.49;
+			var armFrontLength=0.81;
+			var swingCenter=new THREE.Vector3(0,0,swingHeight);		
+			var inputManually=false;
+
+			init();
+			animate();
+			function init() {
+				o_portion=0.9;
+				container = document.createElement('div');
+				document.body.appendChild(container);
+
+				o_width=window.innerWidth-Math.min((1-o_portion)*window.innerWidth/1, window.innerHeight/10);
+				//o_width=window.innerWidth*o_portion;
+				o_height=window.innerHeight;
+				{
+					camera = new THREE.PerspectiveCamera( 45, o_width / o_height, 0.025, 2000 );
+					//camera.lookAt(new THREE.Vector3(100,10000,100));
+					//camera = new THREE.OrthographicCamera(-1,1,1,-1);
+					setView(1);
+					window.addEventListener( 'resize', onWindowResize, false );
+				}
+
+				scene = new THREE.Scene();
+
+				// Grid
+				{
+					var size = 1, step = 0.2;
+					var geometry = new THREE.Geometry();
+					for ( var i = - size; i <= size; i += step ) {
+						geometry.vertices.push( new THREE.Vector3( - size, 0, i ) );
+						geometry.vertices.push( new THREE.Vector3(   size, 0, i ) );
+						geometry.vertices.push( new THREE.Vector3( i, 0, - size  ) );
+						geometry.vertices.push( new THREE.Vector3( i, 0, size ) );
+					}
+					var material = new THREE.LineBasicMaterial( { color: 0xb3aca4, opacity: 1, linewidth:1 } );
+					var line = new THREE.Line( geometry, material );
+					line.type = THREE.LinePieces;
+					scene.add( line );
+				}
+
+				//test mapTable
+				/*
+				{
+					var particleR=0.01;
+					var geometry = new THREE.SphereGeometry( particleR, 30, 30 ); 
+					var material = new THREE.MeshNormalMaterial( { overdraw:
+					true  } );
+
+					for (var i=0;i<=cols;i++){
+						for(var j=0;j<rows;j++){
+							var mapAngle=mapTable[i][j];
+							if(mapAngle[0]>-4){
+								var sphere = new THREE.Mesh( geometry, material );
+								sphere.position.set(i/100-2.5,j/100,0);
+								scene.add(sphere);
+							}
+						}
+					}
+				}
+				*/
+
+				//models
+				{
+					scale=0.01;
+					//var m=new THREE.Matrix4();
+					//m.scale(scale);
+					var m=new THREE.Matrix4();
+					var m1=new THREE.Matrix4();
+					var m2=new THREE.Matrix4();
+					var m3=new THREE.Matrix4();
+					var m4=new THREE.Matrix4();
+					var m5=new THREE.Matrix4();
+					var m6=new THREE.Matrix4();
+					var m7=new THREE.Matrix4();
+					m.makeScale(scale,scale,scale);
+					var mFoot=new THREE.Matrix4();
+					mFoot.copy(m);
+					loader = new THREE.STLLoader();
+					loader.load( 'obj/robot/Foot1.stl', function ( geometry ) {
+						footMesh = new THREE.Mesh( geometry, new THREE.MeshNormalMaterial( { overdraw: true  } ) );
+						footMesh.applyMatrix(mFoot);
+						scene.add(footMesh);
+					} );
+					var mSwing=new THREE.Matrix4();
+					m3.makeTranslation(0,0,38);
+					m4.makeRotationX(-Math.PI/2);
+					m5.makeRotationZ(Math.PI);
+					mSwing.copy(m);
+					mSwing.multiply(m4);
+					mSwing.multiply(m5);
+					mSwing.multiply(m3);
+
+					loader.load( 'obj/robot/Swing.stl', function ( geometry ) {
+						swingMesh = new THREE.Mesh( geometry, new THREE.MeshNormalMaterial( { overdraw: true  } ) );
+						swingMesh.applyMatrix(mSwing);
+						swingMesh.pivot=new THREE.Vector3(0,0,38);
+						swingMesh.axis=new THREE.Vector3(0,1,0);
+						//scene.add(swingMesh);
+					} );
+					var mArm=new THREE.Matrix4();
+					mArm.copy(m);
+					m3.makeTranslation(-8,51,0);
+					m4.makeRotationX(Math.PI/2);
+					m5.makeRotationY(Math.PI/2);
+					m6.makeRotationZ(Math.PI);
+
+					mArm.multiply(m3);
+					mArm.multiply(m4);
+					mArm.multiply(m5);
+
+					loader.load( 'obj/robot/Arm.stl', function ( geometry ) {
+						armMesh = new THREE.Mesh( geometry, new THREE.MeshNormalMaterial( { overdraw: true  } ));
+						armMesh.applyMatrix(mArm);
+						armMesh.pivot=new THREE.Vector3(0, 0.51, 0);
+						//scene.add(armMesh);
+					} );
+					var mArmSpring=new THREE.Matrix4();
+					mArmSpring.copy(m);
+					m3.makeTranslation(-8,100,0);
+
+					mArmSpring.multiply(m3);
+					mArmSpring.multiply(m4);
+					mArmSpring.multiply(m5);
+					loader.load( 'obj/robot/ArmSpring.stl', function ( geometry ) {
+						armSpringMesh = new THREE.Mesh( geometry, new THREE.MeshNormalMaterial( { overdraw: true  } ) );
+						armSpringMesh.applyMatrix(mArmSpring);
+						armSpringMesh.pivot=new THREE.Vector3(0, 1, 0);
+						//scene.add(armSpringMesh);
+					} );
+					var mArmFront=new THREE.Matrix4();
+					mArmFront.copy(m);
+					m3.makeTranslation(-8,149,0);
+
+					mArmFront.multiply(m3);
+					mArmFront.multiply(m4);
+					mArmFront.multiply(m5);
+
+					loader.load( 'obj/robot/ArmFront.stl', function ( geometry ) {
+						armFrontMesh = new THREE.Mesh( geometry, new THREE.MeshNormalMaterial( { overdraw: true  } ) );
+						armFrontMesh.applyMatrix(mArmFront);
+						armFrontMesh.pivot=new THREE.Vector3(0,1.49,0);
+						//scene.add(armFrontMesh);
+					} );
+					var mGripper1=new THREE.Matrix4();
+					mGripper1.copy(m);
+					m3.makeTranslation(-12,230,0);
+					//mGripper1.multiply(m4);
+					//mGripper1.multiply(m3);
+					m5.makeRotationZ(-1*Math.PI/2);
+					mGripper1.multiply(m3);
+					mGripper1.multiply(m5);
+
+					loader.load( 'obj/robot/Gripper.stl', function ( geometry ) {
+						gripper1Mesh = new THREE.Mesh( geometry, new THREE.MeshNormalMaterial( { overdraw: true  } ) );
+						gripper1Mesh.applyMatrix(mGripper1);
+						//scene.add(gripper1Mesh);
+					} );
+
+					var mGripper2=new THREE.Matrix4();
+					mGripper2.copy(m);
+					m3.makeTranslation(12,230,0);
+					m4.makeRotationY(Math.PI);
+					
+					mGripper2.multiply(m3);
+					mGripper2.multiply(m4);
+					mGripper2.multiply(m5);
+
+					loader.load( 'obj/robot/Gripper.stl', function ( geometry ) {
+						gripper2Mesh = new THREE.Mesh( geometry, new THREE.MeshNormalMaterial( { overdraw: true  } ) );
+						gripper2Mesh.applyMatrix(mGripper2);
+						//scene.add(gripper2Mesh);
+					} );
+					
+					var geometry = new THREE.SphereGeometry( sphereRadius, 30, 30 ); 
+					var material = new THREE.MeshNormalMaterial( { overdraw:true  } );
+					/*
+					var sphere = new THREE.Mesh( geometry, material ); 
+					sphere.position.set(0,0,0);
+					scene.add(sphere);
+
+					var sphere = new THREE.Mesh( geometry, material ); 
+					sphere.position.set(0,0.51,0);
+					scene.add(sphere);
+
+					var sphere = new THREE.Mesh( geometry, material ); 
+					sphere.position.set(0,1,0);
+					scene.add(sphere);
+
+					var sphere = new THREE.Mesh( geometry, material ); 
+					sphere.position.set(0,1.49,0);
+					scene.add(sphere);
+*/
+					tipSphere = new THREE.Mesh( geometry, material ); 
+					//tipSphere.position.set(0,2.30,0);
+					tipSphere.position.set(1000,1000,1000);
+					scene.add(tipSphere);
+
+				}
+
+
+				//renderer
+				{
+					//renderer = new THREE.CanvasRenderer();
+					renderer = new THREE.WebGLRenderer();
+					renderer.setSize( o_width, o_height);
+				
+					renderer.domElement.style.position = 'absolute';
+					renderer.domElement.style.top= '0px';
+					renderer.domElement.style.left = '0px';
+					renderer.domElement.style.backgroundColor="#e8dfd6";
+					container.appendChild( renderer.domElement );
+
+					controls = new THREE.OrbitControls( camera , renderer.domElement);
+					controls.addEventListener( 'change', render );
+				}
+
+				//stats
+				{
+					stats = new Stats();
+					stats.domElement.style.position = 'absolute';
+					stats.domElement.style.top = '0px';
+					container.appendChild(stats.domElement);
+				}
+
+				//buttons
+				resizeButtons();
+			}
+
+			function render(){
+				if(!modelInitialized){
+					//waiting for all model initialized
+					if(footMesh && swingMesh && armMesh && armSpringMesh &&
+					armFrontMesh && gripper1Mesh && gripper2Mesh){
+						gripper1G=new THREE.Object3D();	
+						gripper2G=new THREE.Object3D();	
+						armFrontG=new THREE.Object3D();	
+						armSpringG=new THREE.Object3D();	
+						armG=new THREE.Object3D();	
+						swingG=new THREE.Object3D();	
+						footG=new THREE.Object3D();	
+
+						gripper1G.add(gripper1Mesh);
+						gripper2G.add(gripper2Mesh);
+						armFrontG.add(gripper1G);
+						armFrontG.add(gripper2G);
+						armFrontG.add(armFrontMesh);
+						armSpringG.add(armFrontG);
+						armSpringG.add(armSpringMesh);
+						armG.add(armSpringG);
+						armG.add(armMesh);
+						swingG.add(armG);
+						swingG.add(swingMesh);
+						footG.add(swingG);
+						footG.add(footMesh);
+						scene.add(footG)
+
+
+						rotateSwing(0);
+						//rotateArm(1/180.0*Math.PI);
+						rotateArm(0);
+						rotateArmSpring(0);
+						rotateArmFront(0);
+						gripperPercent=0;
+
+						modelInitialized=true;
+
+						
+					}
+					else {
+						return;
+					}
+				}
+				renderer.render( scene, camera );
+				if(typeof(angleInfo)!="undefined"){
+					if(angleInfo.KMConnected){
+						rotateSwing(angleInfo.swingAngle);
+						rotateArm(angleInfo.armAngle);
+						rotateArmSpring(angleInfo.armSpringAngle);
+						rotateArmFront(angleInfo.armFrontAngle);
+					}
+				}
+			}
+
+			function rotateSwing(angle){
+				swingG.angle=angle;
+				swingG.matrix.identity();	
+				var m=new THREE.Matrix4();
+				m.makeRotationAxis(swingMesh.axis, angle);
+				swingG.applyMatrix(m);
+			}
+			function rotateArm(angle){
+				armG.angle=angle;
+				armG.matrix.identity();	
+				var m=new THREE.Matrix4();
+
+				m.makeTranslation(-1*armMesh.pivot.x, 
+				-1*armMesh.pivot.y,-1*armMesh.pivot.z);
+				armG.applyMatrix(m);
+
+				m.makeRotationZ(angle);
+				armG.applyMatrix(m);
+				
+
+				m.makeTranslation(armMesh.pivot.x, armMesh.pivot.y,
+				armMesh.pivot.z);
+				armG.applyMatrix(m);
+			}
+			function rotateArmSpring(angle){
+				armSpringG.angle=angle;
+				armSpringG.matrix.identity();	
+				var m=new THREE.Matrix4();
+
+				m.makeTranslation(-1*armSpringMesh.pivot.x, 
+				-1*armSpringMesh.pivot.y,-1*armSpringMesh.pivot.z);
+				armSpringG.applyMatrix(m);
+				m.makeRotationZ(angle);
+				armSpringG.applyMatrix(m);
+				
+
+				m.makeTranslation(armSpringMesh.pivot.x, armSpringMesh.pivot.y,
+				armSpringMesh.pivot.z);
+				armSpringG.applyMatrix(m);
+			}
+			function rotateArmFront(angle){
+				armFrontG.angle=angle;
+				armFrontG.matrix.identity();	
+				var m=new THREE.Matrix4();
+
+				m.makeTranslation(-1*armFrontMesh.pivot.x, 
+				-1*armFrontMesh.pivot.y,-1*armFrontMesh.pivot.z);
+				armFrontG.applyMatrix(m);
+				m.makeRotationZ(angle);
+				armFrontG.applyMatrix(m);
+				
+
+				m.makeTranslation(armFrontMesh.pivot.x, armFrontMesh.pivot.y,
+				armFrontMesh.pivot.z);
+				armFrontG.applyMatrix(m);
+			}
+
+
+
+			function resizeButtons(){
+				var bWidth=Math.min((1-o_portion)*window.innerWidth/1, window.innerHeight/10);
+				var bHeight=bWidth;
+				var imgWidth=bWidth-8;
+				var imgHeight=imgWidth;
+				$('.btn').css("width",bWidth);
+				$('.btn').css("height",bHeight);
+				$('.btnImg').css("width",imgWidth);
+				$('.btnImg').css("height",imgHeight);
+				var topB=o_height*(1-o_portion);
+				var leftB=o_width;
+
+				topB=0;
+				/*
+				$('#clear').css("top",topB+bHeight);
+				$('#clear').css("left",leftB);
+
+				$('#delete').css("top",topB+bHeight);
+				$('#delete').css("left",leftB);
+
+				$('#playOrPause').css("top",topB+bHeight);
+				$('#playOrPause').css("left",leftB);
+
+				$('#stop').css("top",topB+bHeight);
+				$('#stop').css("left",leftB);
+				*/
+				//views
+				$('#view1').css("top",topB+bHeight*0);
+				$('#view1').css("left",leftB);
+
+				$('#view2').css("top",topB+bHeight*1);
+				$('#view2').css("left",leftB);
+
+				$('#view3').css("top",topB+bHeight*2);
+				$('#view3').css("left",leftB);
+
+				$('#view4').css("top",topB+bHeight*3);
+				$('#view4').css("left",leftB);
+
+				$('#view5').css("top",topB+bHeight*4);
+				$('#view5').css("left",leftB);
+
+				$('#view6').css("top",topB+bHeight*5);
+				$('#view6').css("left",leftB);
+
+				$('#info').css("top",topB+bHeight*7);
+				$('#info').css("left",leftB);
+		
+			}
+
+			function setView(n){
+				if(n==1){
+					camera.position.set(-4,4,4);
+				}else if(n==2){
+					camera.position.set(0,8,0);
+				}else if(n==3){
+					camera.position.set(0,0,8);
+				}else if(n==4){
+					camera.position.set(0,0,-8);
+				}else if(n==5){
+					camera.position.set(-8,0,0);
+				}else if(n==6){
+					camera.position.set(8,0,0);
+				}
+				camera.updateProjectionMatrix();
+			}
+			function onWindowResize() {
+				o_width=window.innerWidth-Math.min((1-o_portion)*window.innerWidth/1, window.innerHeight/10);
+				//o_width=window.innerWidth*o_portion;
+			   	o_height=window.innerHeight;
+				resizeButtons();
+
+				camera.aspect = o_width/o_height;
+				camera.updateProjectionMatrix();
+				renderer.setSize(o_width, o_height);
+			}
+			function animate() {
+				requestAnimationFrame( animate );
+				render();
+				stats.update();
+				controls.update();
+			}
+
+			//Tackle Interactive
+			renderer.domElement.addEventListener('mousemove', onMouseMove, false);
+			function onMouseMove(event){
+				//console.log(event.clientX,event.clientY);
+				var tipPos=getTipPos();
+				if(tipPos=="") return;
+				var snapRange=sphereRadius;
+				//tipSphere.position.copy(tipPos);
+				pointerPos=getPointerPos(event,tipPos);
+				//console.log(pointerPos.distanceTo(pointerPos));
+				if(tipPos.distanceTo(pointerPos)<snapRange){
+					//set visible
+					tipSphere.position.copy(tipPos);
+				}else{
+					//set invisible
+					tipSphere.position.set(1000,1000,1000);
+				}
+				if(tipHold){
+					moveTip(tipPos,pointerPos);
+				}
+			}
+			function moveTip(tipPos,pointerPos){
+				tipSphere.position.copy(pointerPos);
+				//console.log("moveTip");
+				swingAngle=Math.atan2(-pointerPos.x,-pointerPos.z)-Math.PI/2;
+				rotateSwing(swingAngle);
+
+				var dx=Math.sqrt(pointerPos.x*pointerPos.x+pointerPos.z*pointerPos.z);
+				var dy=pointerPos.y;
+
+				var gridX=Math.round(-1*dx*100/(cols/500))+cols/2;
+				var gridY=Math.round(dy*100/(rows/250));
+				var outBoundry=false;
+				if(gridX<0 || gridX > cols || gridY<0 || gridY>rows){
+					outBoundry=true;
+				}else{
+					mapAngle=mapTable[gridX][gridY];
+					if(typeof(angleInfo)=="undefined" || angleInfo.KMConnected!=true){
+						inputManually=true;
+					}
+					if(inputManually && typeof(angleInfo)!="undefined"){
+						angleInfo.swingAngle=swingAngle;
+					}
+					
+					if(inputManually && mapAngle[0]>-4){
+						rotateArm(mapAngle[0]/180*Math.PI);
+						rotateArmSpring(mapAngle[1]/180*Math.PI);
+						rotateArmFront(mapAngle[2]/180*Math.PI);
+						if(inputManually){
+							angleInfo.armAngle=mapAngle[0]/180*Math.PI;
+							angleInfo.armSpringAngle=mapAngle[1]/180*Math.PI;
+							angleInfo.armFrontAngle=mapAngle[2]/180*Math.PI;
+						}
+					}
+				}
+				/*
+				if(outBoundry){
+					console.log("out of boundtry");
+					var dir=pointerPos.clone().sub(swingCenter).normalize();
+					dir.multiplyScalar(-0.5);
+					var uLength=dir.length();
+					var tLength=pointerPos.distanceTo(swingCenter);
+					var iTimes=tLength/uLength;
+
+					var curPos=new THREE.Vector3()
+					curPos.copy(pointerPos);
+					for(i=0;i<iTimes;i++){
+						curPos.add(dir);
+						var dx=Math.sqrt(curPos.x*curPos.x+curPos.z+curPos.z)
+						var dy=curPos.y;
+						var gridX=Math.round(-1*dx*100/(cols/500))+cols/2;
+						var gridY=Math.round(dy*100/(rows/250));
+						if(gridX<0 || gridX > cols || gridY<0 || gridY>rows){
+							continue;
+						}else{
+							mapAngle=mapTable[gridX][gridY];
+							if(mapAngle[0]>-4){
+								rotateArm(mapAngle[0]/180*Math.PI);
+								rotateArmSpring(mapAngle[1]/180*Math.PI);
+								rotateArmFront(mapAngle[2]/180*Math.PI);
+								break;
+							}
+						}
+					}
+				}
+				*/
+			}
+			function getTipPos(){
+				var tmpV=new THREE.Vector3(0,0,1);
+				var axisH=new THREE.Vector3(0,0,1);
+				var axisV=new THREE.Vector3(0,1,0);
+				var dReferPoint=new THREE.Vector3(0,1,0);
+				var curTip=new THREE.Vector3(0,0.51,0);
+
+				if(!modelInitialized){
+					return "";
+				}
+				axisH.applyAxisAngle(axisV,swingG.angle);		
+				dReferPoint.applyAxisAngle(axisH, armG.angle);	
+				tmpV.copy(dReferPoint);
+				tmpV.multiplyScalar(armLength);
+				curTip.add(tmpV);
+
+				dReferPoint.applyAxisAngle(axisH, armSpringG.angle);	
+				tmpV.copy(dReferPoint);
+				tmpV.multiplyScalar(armSpringLength);
+				curTip.add(tmpV);
+				
+				dReferPoint.applyAxisAngle(axisH, armFrontG.angle);	
+				tmpV.copy(dReferPoint);
+				tmpV.multiplyScalar(armFrontLength);
+				curTip.add(tmpV);
+				return curTip;
+			}
+			function getPointerPos(event, tipPos){
+				var eleLeft=renderer.domElement.offsetLeft;
+				var eleTop=renderer.domElement.offsetTop;
+				var eleX=(event.clientX-eleLeft)/o_width*2-1;
+				var eleY=(event.clientY-eleTop)/o_height*(-2)+1;
+				var vector = new THREE.Vector3(eleX,eleY,0.5 );
+				projector.unprojectVector( vector, camera );
+				var dir = vector.sub( camera.position ).normalize();
+				var ray = new THREE.Ray( camera.position, dir );
+				//var distance = - camera.position.y / dir.y;
+				var distance = camera.position.distanceTo(tipPos);
+				var pos = camera.position.clone().add( dir.multiplyScalar( distance));
+				return pos;
+				//return new THREE.Vector2(pos.x,pos.z);
+			}
+
+			renderer.domElement.addEventListener('mousedown', onMouseDown, false);
+			function onMouseDown(event){
+				var tipPos=getTipPos();
+				if(tipPos=="") return;
+				//console.log(tipPos);
+				var snapRange=sphereRadius;
+				pointerPos=getPointerPos(event,tipPos);
+				if(typeof(angleInfo)=="undefined" || angleInfo.KMConnected!=true){
+					inputManually=true;
+				}
+				if(inputManually &&  tipHold==false && tipPos.distanceTo(pointerPos)<snapRange){
+				//if(tipHold==false and tipPos.distanceTo(pointerPos)<snapRange){
+					controls.enabled=false;
+					tipHold=true;
+				}
+			}
+			renderer.domElement.addEventListener('mouseup', onMouseUp, false);
+			function onMouseUp(event){
+				tipHold=false;
+				controls.enabled=true;
+			}
+
+		</script>
+	</body>
+</html>

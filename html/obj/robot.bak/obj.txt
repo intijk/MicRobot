@@ -1,0 +1,4 @@
+Foot->Swing->Arm->ArmSpring->ArmFront->FrontPlate->Gripper->GripperRack(->Gear)
+                                                 ->Gripper->GripperRack
+
+Add motor and gear later.
